@@ -435,6 +435,64 @@ exit_success:
 
 }
 
+#define UBI_DEV_NUM_AUTO (-1)
+#define UBI_CTRL_IOC_MAGIC 'o'
+#define UBI_IOCATT _IOW(UBI_CTRL_IOC_MAGIC, 64, struct ubi_attach_req)
+
+struct ubi_attach_req {
+	__s32 ubi_num;
+	__s32 mtd_num;
+	__s32 vid_hdr_offset;
+	__s8 padding[12];
+};
+
+static int ubi_attach(const char *ubi_ctrl, int mtd_num, int dev_num)
+{
+    int fd, ret;
+    struct ubi_attach_req req;
+
+    fd = open(ubi_ctrl, O_RDWR);
+    if (fd < 0)
+        return -1;
+
+    if (dev_num < 0)
+        dev_num = UBI_DEV_NUM_AUTO;
+
+    memset(&req, 0, sizeof(req));
+    req.mtd_num = mtd_num;
+    req.ubi_num = dev_num;
+
+    ret = ioctl(fd, UBI_IOCATT, &req);
+
+    close(fd);
+    return ret;
+}
+
+int do_ubiattach(int nargs, char **args)
+{
+    char *source = args[1];
+    int mtd_num, ubi_num = -1;
+
+    if (nargs >= 3) {
+        ubi_num = strtol(args[2], 0, 0);
+    }
+
+    if (!strncmp(source, "mtd@", 4)) {
+        mtd_num = mtd_name_to_number(source + 4);
+        if (mtd_num < 0) {
+            return -1;
+        }
+    } else {
+        mtd_num = strtoul(source, 0, 0);
+    }
+
+    if (ubi_attach("/dev/ubi_ctrl", mtd_num, ubi_num)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int do_setkey(int nargs, char **args)
 {
     struct kbentry kbe;
