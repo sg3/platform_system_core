@@ -437,6 +437,9 @@ static void import_kernel_nv(char *name, int in_qemu)
             strlcpy(console, value, sizeof(console));
         } else if (!strcmp(name,"androidboot.mode")) {
             strlcpy(bootmode, value, sizeof(bootmode));
+        /* Samsung Bootloader recovery cmdline */
+        } else if (!strcmp(name,"bootmode")) {
+            strlcpy(bootmode, value, sizeof(bootmode));
         } else if (!strcmp(name,"androidboot.serialno")) {
             strlcpy(serialno, value, sizeof(serialno));
         } else if (!strcmp(name,"androidboot.baseband")) {
@@ -668,6 +671,7 @@ int main(int argc, char **argv)
     int property_set_fd_init = 0;
     int signal_fd_init = 0;
     int keychord_fd_init = 0;
+    int recovery = 0;
 
     if (!strcmp(basename(argv[0]), "ueventd"))
         return ueventd_main(argc, argv);
@@ -703,7 +707,15 @@ int main(int argc, char **argv)
     klog_init();
 
     INFO("reading config file\n");
-    init_parse_config_file("/init.rc");
+
+
+    if (!strcmp(bootmode, "2") || !strcmp(bootmode, "4"))
+        recovery = 1;
+
+    if (recovery)
+        init_parse_config_file("/recovery.rc");
+    else
+        init_parse_config_file("/init.rc");
 
     /* pull the kernel commandline and ramdisk properties file in */
     import_kernel_cmdline(0, import_kernel_nv);
@@ -711,7 +723,9 @@ int main(int argc, char **argv)
     chmod("/proc/cmdline", 0440);
     get_hardware_name(hardware, &revision);
     snprintf(tmp, sizeof(tmp), "/init.%s.rc", hardware);
-    init_parse_config_file(tmp);
+
+    if (!recovery)
+        init_parse_config_file(tmp);
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
