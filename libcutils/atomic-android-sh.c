@@ -115,7 +115,7 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr) {
 
 int android_atomic_acquire_cmpxchg(int32_t oldvalue, int32_t newvalue,
                            volatile int32_t* addr) {
-    return android_atomic_release_cmpxchg(oldValue, newValue, addr);
+    return android_atomic_release_cmpxchg(oldvalue, newvalue, addr);
 }
 
 int android_atomic_release_cmpxchg(int32_t oldvalue, int32_t newvalue,

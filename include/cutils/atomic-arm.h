@@ -136,6 +136,14 @@ extern inline int android_atomic_acquire_cas(int32_t old_value,
     return status;
 }
 
+extern inline int android_atomic_cmpxchg(int32_t old_value,
+                                         int32_t new_value,
+                                         volatile int32_t *ptr)
+{
+    android_memory_barrier();
+    return android_atomic_cas(old_value, new_value, ptr);
+}
+
 extern inline int android_atomic_release_cas(int32_t old_value,
                                              int32_t new_value,
                                              volatile int32_t *ptr)
