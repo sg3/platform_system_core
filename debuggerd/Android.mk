@@ -34,7 +34,7 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_SHARED_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
 
-ifeq ($(ARCH_ARM_HAVE_VFP),true)
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
 include $(CLEAR_VARS)
 
 LOCAL_CFLAGS += -DWITH_VFP
