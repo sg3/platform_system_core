@@ -61,6 +61,7 @@ static int   bootchart_count;
 static char console[32];
 static char serialno[32];
 static char bootmode[32];
+static char battchg_pause[32];
 static char baseband[32];
 static char carrier[32];
 static char bootloader[32];
@@ -156,7 +157,7 @@ void service_start(struct service *svc, const char *dynamic_args)
          * state and immediately takes it out of the restarting
          * state if it was in there
          */
-    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET));
+    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART));
     svc->time_started = 0;
 
         /* running processes require no additional work -- if
@@ -302,15 +303,14 @@ void service_start(struct service *svc, const char *dynamic_args)
         notify_service_state(svc->name, "running");
 }
 
-/* The how field should be either SVC_DISABLED or SVC_RESET */
+/* The how field should be either SVC_DISABLED, SVC_RESET, or SVC_RESTART */
 static void service_stop_or_reset(struct service *svc, int how)
 {
-        /* we are no longer running, nor should we
-         * attempt to restart
-         */
-    svc->flags &= (~(SVC_RUNNING|SVC_RESTARTING));
+    /* The service is still SVC_RUNNING until its process exits, but if it has
+     * already exited it shoudn't attempt a restart yet. */
+    svc->flags &= (~SVC_RESTARTING);
 
-    if ((how != SVC_DISABLED) && (how != SVC_RESET)) {
+    if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
         /* Hrm, an illegal flag.  Default to SVC_DISABLED */
         how = SVC_DISABLED;
     }
@@ -340,6 +340,17 @@ void service_reset(struct service *svc)
 void service_stop(struct service *svc)
 {
     service_stop_or_reset(svc, SVC_DISABLED);
+}
+
+void service_restart(struct service *svc)
+{
+    if (svc->flags & SVC_RUNNING) {
+        /* Stop, wait, then start the service. */
+        service_stop_or_reset(svc, SVC_RESTART);
+    } else if (!(svc->flags & SVC_RESTARTING)) {
+        /* Just start the service since it's not running. */
+        service_start(svc, NULL);
+    } /* else: Service is restarting anyways. */
 }
 
 void property_changed(const char *name, const char *value)
@@ -408,6 +419,17 @@ static void msg_stop(const char *name)
     }
 }
 
+static void msg_restart(const char *name)
+{
+    struct service *svc = service_find_by_name(name);
+
+    if (svc) {
+        service_restart(svc);
+    } else {
+        ERROR("no such service '%s'\n", name);
+    }
+}
+
 void handle_control_message(const char *msg, const char *arg)
 {
     if (!strcmp(msg,"start")) {
@@ -415,8 +437,7 @@ void handle_control_message(const char *msg, const char *arg)
     } else if (!strcmp(msg,"stop")) {
         msg_stop(arg);
     } else if (!strcmp(msg,"restart")) {
-        msg_stop(arg);
-        msg_start(arg);
+        msg_restart(arg);
     } else {
         ERROR("unknown control msg '%s'\n", msg);
     }
@@ -442,6 +463,8 @@ static void import_kernel_nv(char *name, int in_qemu)
         /* Samsung Bootloader recovery cmdline */
         } else if (!strcmp(name,"bootmode")) {
             strlcpy(bootmode, value, sizeof(bootmode));
+        } else if (!strcmp(name,"androidboot.battchg_pause")) {
+            strlcpy(battchg_pause, value, sizeof(battchg_pause));
         } else if (!strcmp(name,"androidboot.serialno")) {
             strlcpy(serialno, value, sizeof(serialno));
         } else if (!strcmp(name,"androidboot.baseband")) {
@@ -532,7 +555,7 @@ static int property_init_action(int nargs, char **args)
     bool load_defaults = true;
 
     INFO("property init\n");
-    if (!strcmp(bootmode, "charger"))
+    if (!strcmp(bootmode, "charger") || !strcmp(battchg_pause, "true"))
         load_defaults = false;
     property_init(load_defaults);
     return 0;
@@ -775,7 +798,7 @@ int main(int argc, char **argv)
     action_for_each_trigger("init", action_add_queue_tail);
 
     /* skip mounting filesystems in charger mode */
-    if (strcmp(bootmode, "charger") != 0) {
+    if (strcmp(bootmode, "charger") != 0 || strcmp(battchg_pause, "true") != 0) {
         action_for_each_trigger("early-fs", action_add_queue_tail);
     if(emmc_boot) {
         action_for_each_trigger("emmc-fs", action_add_queue_tail);
@@ -790,7 +813,7 @@ int main(int argc, char **argv)
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 
-    if (!strcmp(bootmode, "charger")) {
+    if (!strcmp(bootmode, "charger") || !strcmp(battchg_pause, "true")) {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
         action_for_each_trigger("early-boot", action_add_queue_tail);
